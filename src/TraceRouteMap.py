@@ -1,3 +1,16 @@
+#########################
+#
+#   ▗  ▖ ▝              ▝▜      ▄▄▄▖                    ▗▄▄          ▗
+#   ▝▖▗▘▗▄   ▄▖ ▗ ▗  ▄▖  ▐       ▐   ▖▄  ▄▖  ▄▖  ▄▖     ▐ ▝▌ ▄▖ ▗ ▗ ▗▟▄  ▄▖
+#    ▌▐  ▐  ▐ ▝ ▐ ▐ ▝ ▐  ▐       ▐   ▛ ▘▝ ▐ ▐▘▝ ▐▘▐     ▐▄▄▘▐▘▜ ▐ ▐  ▐  ▐▘▐
+#    ▚▞  ▐   ▀▚ ▐ ▐ ▗▀▜  ▐       ▐   ▌  ▗▀▜ ▐   ▐▀▀     ▐ ▝▖▐ ▐ ▐ ▐  ▐  ▐▀▀
+#    ▐▌ ▗▟▄ ▝▄▞ ▝▄▜ ▝▄▜  ▝▄      ▐   ▌  ▝▄▜ ▝▙▞ ▝▙▞     ▐  ▘▝▙▛ ▝▄▜  ▝▄ ▝▙▞
+#
+#   Stupid simple plot of traceroute.
+#   Get output, get IP, plot on basemap, get out.
+#
+#########################
+
 import json
 import logging
 import re
@@ -11,11 +24,12 @@ from pyproj import Geod
 
 from src.config import *
 
-########################
+#########################
 #
 # TODO
 #   map out to centre or something, or be cyclic at least
 #
+#########################
 
 #########################
 ## LOGGER CONFIGURATION #
@@ -34,10 +48,22 @@ logger.addHandler(logfile_handler)                      # to the file
 logger.addHandler(logging.StreamHandler(sys.stdout))    # to standard out
 logger.setLevel(logging.DEBUG)                          # set default level
 
+################
+#
+################
 
 class Hop:
+    """
+
+    """
 
     def __init__(self, num: int, ip: str, time: float):
+        """
+
+        :param num:
+        :param ip:
+        :param time:
+        """
 
         logger.info("init hop")
 
@@ -50,6 +76,11 @@ class Hop:
             self.geolocate(self.ip)
 
     def geolocate(self, ip: str):
+        """
+
+        :param ip:
+        :return:
+        """
 
         if ip is not None:
             url = f'http://ipinfo.io/{ip}?token={api_token}'
@@ -66,16 +97,20 @@ class Hop:
 
             print(self.coords)
 
-    ###########
-    # setters #
-    ###########
+    #########
+    # setters
 
     def set_coords(self, coords: list) -> None:
+        """
+
+        :param coords:
+        :return:
+        """
+
         self.coords = coords
 
-    ###########
-    # getters #
-    ###########
+    #########
+    # getters
 
     def get_num(self) -> int:
         return self.num
@@ -89,10 +124,17 @@ class Hop:
     def get_coords(self) -> list:
         return self.coords
 
+################
+#
+################
 
 class Map:
 
     def __init__(self, dest: str):
+        """
+
+        :param dest:
+        """
         logger.info("init map")
 
         self.plt = None
@@ -103,9 +145,12 @@ class Map:
 
         self.dest = dest
         self.set_up()
-       # self.show_map()
 
     def set_up(self):
+        """
+
+        :return:
+        """
 
         self.lon_min = -180
         self.lon_max = 180
@@ -115,15 +160,19 @@ class Map:
         self.fig = plt.figure(figsize=(12, 8))
         self.m.drawcoastlines(linewidth=1.25)
         self.m.fillcontinents(color='0.9')
-        self.m.drawparallels(np.arange(-85, 85, 20), labels=[1, 1, 0, 0])
+        self.m.drawparallels(np.arange(-90, 90, 30), labels=[1, 1, 0, 0])
         self.m.drawmeridians(np.arange(0, 360, 60), labels=[0, 0, 0, 1])
 
     def show_map(self):
+        """
+
+        :return:
+        """
+
         plt.title(f'traceroute to {self.dest}')
         plt.show()
 
     def plot_pts_v1(self, points: list):
-
         logger.info("plotting points")
 
         valid_points = [(lat, lon) for lat, lon in points if lat and lon]
@@ -148,6 +197,11 @@ class Map:
             self.m.plot(x, y, 'r--', linewidth=2)
 
     def plot_pts(self, points: list):
+        """
+
+        :param points:
+        :return:
+        """
         logger.debug("plotting points")
 
         valid_points = [(lat, lon) for lat, lon in points if lat and lon]
@@ -165,36 +219,49 @@ class Map:
             start_lat, start_lon = start
             end_lat, end_lon = end
 
-            if abs(start_lon - end_lon) > 180:
+            if abs(start_lon - end_lon) > self.lon_max:
 
                 if start_lon > end_lon:
 
-                    lonlats1 = self.geod.npts(start_lon, start_lat, 180,
-                                              start_lat + (end_lat - start_lat) * (180 - start_lon) / (
+                    lonlats1 = self.geod.npts(start_lon, start_lat, self.lon_max,
+                                              start_lat + (end_lat - start_lat) 
+                                              * (self.lon_max - start_lon) / (
                                                       end_lon - start_lon), 100)
-                    lonlats2 = self.geod.npts(-180, end_lat + (start_lat - end_lat) * (360 + start_lon) / (
+                    lonlats2 = self.geod.npts(-self.lon_min, end_lat + 
+                    (start_lat - end_lat) * (360 + start_lon) / (
                             end_lon - start_lon), end_lon, end_lat, 100)
                 else:
-                    lonlats1 = self.geod.npts(start_lon, start_lat, -180,
-                                              start_lat + (end_lat - start_lat) * (start_lon + 180) / (
+                    lonlats1 = self.geod.npts(start_lon, start_lat, 
+                    self.lon_min, start_lat + (end_lat - start_lat) 
+                                              * (start_lon + self.lon_max) / (
                                                       end_lon - start_lon), 100)
-                    lonlats2 = self.geod.npts(180,
+
+                    lonlats2 = self.geod.npts(self.lon_max,
                                               end_lat + (start_lat - end_lat) * (360 - end_lon) / (end_lon - start_lon),
                                               end_lon, end_lat, 100)
 
-                x1, y1 = self.m([lon for lon, lat in lonlats1], [lat for lon, lat in lonlats1])
-                x2, y2 = self.m([lon for lon, lat in lonlats2], [lat for lon, lat in lonlats2])
+                x1, y1 = self.m([lon for lon, lat in lonlats1], 
+                [lat for lon, lat in lonlats1])
+                x2, y2 = self.m([lon for lon, lat in lonlats2],
+                 [lat for lon, lat in lonlats2])
 
                 self.m.plot(x1, y1, 'r--')
                 self.m.plot(x2, y2, 'r--')
 
             else:
-                lonlats = self.geod.npts(start_lon, start_lat, end_lon, end_lat, 100)
-                x, y = self.m([lon for lon, lat in lonlats], [lat for lon, lat in lonlats])
+                lonlats = self.geod.npts(start_lon, start_lat,
+                 end_lon, end_lat, 100)
+                x, y = self.m([lon for lon, lat in lonlats],
+                 [lat for lon, lat in lonlats])
                 self.m.plot(x, y, 'r--')
 
 
     def add_hop(self, hop: Hop):
+        """
+
+        :param hop:
+        :return:
+        """
 
         coords = hop.get_coords()
 
@@ -208,8 +275,16 @@ class Map:
 
         logger.debug(f"adding hop, coords: {coords}")
 
+################
+#
+################
 
 def process_tr(tr_out: str) -> list:
+    """
+
+    :param tr_out:
+    :return:
+    """
 
     outp = tr_out.strip().split()
     if not outp[0].isdigit():
@@ -223,26 +298,35 @@ def process_tr(tr_out: str) -> list:
     return [int(outp[0]), ip[0] if ip else "", float(ms) if ms else 0.0]
 
 
+################
+#
+################
+
 class VisualTraceRoute:
+    """
+
+    """
 
     def __init__(self, dest: str):
+        """
+
+        :param dest:
+        """
         logger.debug("init vrt")
 
         self.dest = dest
         self.start()
 
     def start(self):
+        """
 
-        ############
-        # init map #
-        ############
+        :return:
+        """
 
+        # init map
         m = Map(self.dest)
 
-        ##########
-        # run tr #
-        ##########
-
+        # run tr
         logger.debug("starting traceroute")
 
         tracert = f"traceroute {self.dest} -n -q 1 -w 1"
@@ -257,9 +341,10 @@ class VisualTraceRoute:
                 if output:
                     print(output)
 
-                    ################
-                    # extract IPS
-                    ################
+                    ###############
+                    # extract ips #
+                    ###############
+
                     [num, ip, time] = process_tr(output)
 
                     if num != 0 and ip and time != 0:
@@ -277,6 +362,9 @@ class VisualTraceRoute:
         except Exception as e:
             logger.error(f"Exception: {e}")
 
+################
+# main
+################
 
 def runner(dest: str) -> None:
     """
