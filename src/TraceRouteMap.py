@@ -166,29 +166,6 @@ class Map:
         plt.title(f'traceroute to {self.dest}')
         plt.show()
 
-    def plot_pts_v1(self, points: list):
-        logger.info("plotting points")
-
-        valid_points = [(lat, lon) for lat, lon in points if lat and lon]
-        if not valid_points:
-            logger.info("No valid points to plot.")
-            return
-        locations = [(float(lat), float(lon)) for lat, lon in valid_points]
-
-        for i in range(len(locations) - 1):
-            start = locations[i]
-            end = locations[i + 1]
-
-            x_start, y_start = self.m(start[1], start[0])
-            x_end, y_end = self.m(end[1], end[0])
-
-            self.m.plot(x_start, y_start, 'bo', markersize=4)
-            self.m.plot(x_end, y_end, 'bo', markersize=4)
-
-            lonlats = self.g.npts(start[1], start[0], end[1], end[0], 100)
-            x, y = self.m([lon for lon, lat in lonlats], [lat for lon, lat in lonlats])
-            self.m.plot(x, y, 'r--', linewidth=2)
-
     def plot_pts(self, points: list):
         """
         Plot each point in the point list property of the map.
@@ -201,7 +178,7 @@ class Map:
         valid_points = [(lat, lon) for lat, lon in points if lat and lon]
 
         if not valid_points:
-            logger.info("No valid points to plot.")
+            logger.debug("no valid points to plot")
             return
 
         locations = [(float(lat), float(lon)) for lat, lon in valid_points]
@@ -275,7 +252,7 @@ class Map:
 
 def process_tr(tr_out: str) -> list:
     """
-    Process each line of the traceroute and
+    Process each line of the traceroute and return valid.
 
     :param tr_out:
     :return:
@@ -304,7 +281,6 @@ class VisualTraceRoute:
 
     def __init__(self, dest: str):
         """
-
         :param dest:
         """
         logger.debug("initialising vrt")
@@ -314,7 +290,7 @@ class VisualTraceRoute:
 
     def start(self):
         """
-
+        Start the traceroute and main process.
         :return:
         """
 
