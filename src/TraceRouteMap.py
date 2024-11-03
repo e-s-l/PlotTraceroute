@@ -5,9 +5,9 @@
 #
 #########################
 
-import json
-import logging
-import re
+import json                                     #
+import logging                                  #
+import re                                       #
 import subprocess
 import sys
 from urllib.request import urlopen
@@ -16,6 +16,7 @@ from matplotlib import pyplot as plt
 from mpl_toolkits.basemap import Basemap
 from pyproj import Geod
 
+# 
 from src.config import *
 
 #########################
@@ -31,18 +32,31 @@ from src.config import *
 ## LOGGER CONFIGURATION #
 #########################
 
-logfile = "test.log"
+
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)                          # set default level
+
+
 
 # format of the log messages
-logfmt = logging.Formatter("%(asctime)s-%(levelname)s: %(message)s", "%Y%m%d%H%M%S")
+debug_fmt = logging.Formatter("%(asctime)s-%(levelname)s: %(message)s", "%Y%m%d%H%M%S")
+info_fmt = logging.Formatter(" %(message)s")
+
+log_info = "info.log"
+info_handler =  logging.FileHandler(log_info, 'w')
+info_handler.setLevel(logging.INFO)
+info_handler.setFormatter(info_fmt)
+
+
+log_debug = "debug.log"
+debug_handler =  logging.FileHandler(log_debug)
+debug_handler.setLevel(logging.DEBUG)
+debug_handler.setFormatter(debug_fmt)
 
 # set the format & make output go to stdout & the logfile
-logfile_handler = logging.FileHandler(logfile)
-logfile_handler.setFormatter(logfmt)
-logger.addHandler(logfile_handler)                      # to the file
+logger.addHandler(info_handler)                         # to the file
+logger.addHandler(debug_handler)                        # to the file
 logger.addHandler(logging.StreamHandler(sys.stdout))    # to standard out
-logger.setLevel(logging.DEBUG)                          # set default level
 
 ###########
 ### Hop ###
@@ -85,11 +99,11 @@ class Hop:
             data = json.load(response)
             try:
                 if 'bogon' in data:
-                    logger.info("Caught a bogon.")
+                    logger.info("caught a bogon")
                 else:
                     self.set_coords(data['loc'].split(','))
-            except KeyError as e:
-                logger.error(f"Geolocation error: {e}")
+            except KeyError | Exception as e:
+                logger.error(f"geolocation error: {e}")
 
     ###########
     # setters #
@@ -131,14 +145,20 @@ class Map:
         """
         :param dest:
         """
-        logger.info("initialising map")
+
+        logger.debug("initialising map")
 
         self.plt = None
         self.fig = None
         self.m = None
-        self.pts = []
+        self.hops = []
         self.g = Geod(ellps="WGS84")
         self.dest = dest
+        self.plot_delay = 0.1
+
+        # These ought to be first point +/- 180
+        self.lon_min = -180
+        self.lon_max = 180
 
         self.set_up()
 
@@ -147,8 +167,6 @@ class Map:
         Construct the basemap.
         """
 
-        self.lon_min = -180
-        self.lon_max = 180
         self.m = Basemap(llcrnrlon=self.lon_min, llcrnrlat=-90,
                          urcrnrlon=self.lon_max, urcrnrlat=90, projection='mill')
 
@@ -166,22 +184,52 @@ class Map:
         plt.title(f'traceroute to {self.dest}')
         plt.show()
 
-    def plot_pts(self, points: list):
+
+    def add_hop(self, hop: Hop):
         """
-        Plot each point in the point list property of the map.
 
-        :param points:
-        :return:
+        :param hop:
         """
-        logger.debug("plotting points")
 
-        valid_points = [(lat, lon) for lat, lon in points if lat and lon]
+        if hop.get_coords() and hop.get_coords() != ["", ""]:
+            self.hops.append(hop)
 
-        if not valid_points:
-            logger.debug("no valid points to plot")
-            return
+           # logger.debug(f"added hop to {coords}")
 
-        locations = [(float(lat), float(lon)) for lat, lon in valid_points]
+        self.plot_hops()
+
+    def plot_hops(self):
+
+        self.plot_hop_point()
+
+        if len(self.hops) > 1:
+            #
+            self.plot_arcs()
+
+        #
+        plt.draw()
+        plt.pause(self.plot_delay)
+
+    def plot_hop_point(self):
+
+        locations = get_valid_locations(self.hops)
+
+        # plot the points
+        for i in range(len(locations) - 1):
+
+            start = locations[i]
+            end = locations[i + 1]
+
+            x_start, y_start = self.m(start[1], start[0])
+            x_end, y_end = self.m(end[1], end[0])
+            print(f"{x_end} {y_end}")
+
+            self.m.plot(x_start, y_start, 'bo', markersize=4)
+            self.m.plot(x_end, y_end, 'bo', markersize=4)
+
+    def plot_arcs(self):
+
+        locations = get_valid_locations(self.hops)
 
         for i in range(len(locations) - 1):
             start = locations[i]
@@ -195,60 +243,59 @@ class Map:
                 if start_lon > end_lon:
 
                     lonlats1 = self.g.npts(start_lon, start_lat, self.lon_max,
-                                              start_lat + (end_lat - start_lat) 
-                                              * (self.lon_max - start_lon) / (
-                                                      end_lon - start_lon), 100)
+                                           start_lat + (end_lat - start_lat)
+                                           * (self.lon_max - start_lon) / (
+                                                   end_lon - start_lon), 100)
                     lonlats2 = self.g.npts(-self.lon_min, end_lat +
-                    (start_lat - end_lat) * (360 + start_lon) / (
-                            end_lon - start_lon), end_lon, end_lat, 100)
+                                           (start_lat - end_lat) * (360 + start_lon) / (
+                                                   end_lon - start_lon), end_lon, end_lat, 100)
                 else:
                     lonlats1 = self.g.npts(start_lon, start_lat,
-                    self.lon_min, start_lat + (end_lat - start_lat) 
-                                              * (start_lon + self.lon_max) / (
-                                                      end_lon - start_lon), 100)
+                                           self.lon_min, start_lat + (end_lat - start_lat)
+                                           * (start_lon + self.lon_max) / (
+                                                   end_lon - start_lon), 100)
 
                     lonlats2 = self.g.npts(self.lon_max,
-                                              end_lat + (start_lat - end_lat) * (360 - end_lon) / (end_lon - start_lon),
-                                              end_lon, end_lat, 100)
+                                           end_lat + (start_lat - end_lat) *
+                                           (360 - end_lon) / (end_lon - start_lon),
+                                           end_lon, end_lat, 100)
 
-                x1, y1 = self.m([lon for lon, lat in lonlats1], 
-                [lat for lon, lat in lonlats1])
+                x1, y1 = self.m([lon for lon, lat in lonlats1],
+                                [lat for lon, lat in lonlats1])
                 x2, y2 = self.m([lon for lon, lat in lonlats2],
-                 [lat for lon, lat in lonlats2])
+                                [lat for lon, lat in lonlats2])
 
                 self.m.plot(x1, y1, 'r--')
                 self.m.plot(x2, y2, 'r--')
 
             else:
                 lonlats = self.g.npts(start_lon, start_lat,
-                 end_lon, end_lat, 100)
+                                      end_lon, end_lat, 100)
                 x, y = self.m([lon for lon, lat in lonlats],
-                 [lat for lon, lat in lonlats])
+                              [lat for lon, lat in lonlats])
                 self.m.plot(x, y, 'r--')
 
-
-    def add_hop(self, hop: Hop):
-        """
-
-        :param hop:
-        :return:
-        """
-
-        coords = hop.get_coords()
-
-        if coords and coords != ["", ""]:
-            self.pts.append(coords)
-            logger.debug(f"added hop, coords: {coords}")
-
-        if len(self.pts) > 1:
-            self.plot_pts(self.pts)
-
-            plt.draw()
-            plt.pause(0.1)
 
 ###########
 # utility #
 ###########
+
+def get_valid_locations(hops: list) -> list:
+
+    # the 3 following checks can probably be merged
+    points = []
+
+    for hop in hops:
+        points.append(hop.get_coords())
+
+    valid_points = [(lat, lon) for lat, lon in points if lat and lon]
+
+    if not valid_points:
+        logger.debug("no valid points to plot")
+        return []
+
+    return [(float(lat), float(lon)) for lat, lon in valid_points]
+
 
 def process_tr(tr_out: str) -> list:
     """
@@ -291,7 +338,6 @@ class VisualTraceRoute:
     def start(self):
         """
         Start the traceroute and main process.
-        :return:
         """
 
         # init map
@@ -303,14 +349,17 @@ class VisualTraceRoute:
         tracert = f"traceroute {self.dest} -n -q 1 -w 1"
         try:
             # open the process (better than run coz can pipe out stdout & stderr (treating as text))
-            proc = subprocess.Popen(tracert, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            proc = subprocess.Popen(tracert, shell=True, stdout=subprocess.PIPE,
+                                    stderr=subprocess.PIPE, text=True)
             while True:
                 output = proc.stdout.readline()
                 # check if finished (proc.poll will return an exit code)
                 if output == '' and proc.poll() is not None:
                     break
                 if output:
-                    logger.debug(output)
+                    output = output.strip()
+
+                    logger.info(output)
 
                     ##################
                     # process output #
